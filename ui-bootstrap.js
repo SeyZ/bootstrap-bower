@@ -2,7 +2,7 @@
  * angular-ui-bootstrap
  * http://angular-ui.github.io/bootstrap/
 
- * Version: 0.10.0 - 2014-01-13
+ * Version: 0.11.0-SNAPSHOT - 2014-01-16
  * License: MIT
  */
 angular.module("ui.bootstrap", ["ui.bootstrap.transition","ui.bootstrap.collapse","ui.bootstrap.accordion","ui.bootstrap.alert","ui.bootstrap.bindHtml","ui.bootstrap.buttons","ui.bootstrap.carousel","ui.bootstrap.position","ui.bootstrap.datepicker","ui.bootstrap.dropdownToggle","ui.bootstrap.modal","ui.bootstrap.pagination","ui.bootstrap.tooltip","ui.bootstrap.popover","ui.bootstrap.progressbar","ui.bootstrap.rating","ui.bootstrap.tabs","ui.bootstrap.timepicker","ui.bootstrap.typeahead"]);
@@ -1742,9 +1742,16 @@ angular.module('ui.bootstrap.pagination', [])
 
 .controller('PaginationController', ['$scope', '$attrs', '$parse', '$interpolate', function ($scope, $attrs, $parse, $interpolate) {
   var self = this,
+      ngModelCtrl = { $setViewValue: angular.noop }, // nullModelCtrl
       setNumPages = $attrs.numPages ? $parse($attrs.numPages).assign : angular.noop;
 
-  this.init = function(defaultItemsPerPage) {
+  this.init = function(ngModelCtrl_, defaultItemsPerPage) {
+    ngModelCtrl = ngModelCtrl_;
+
+    ngModelCtrl.$render = function() {
+      self.render();
+    };
+
     if ($attrs.itemsPerPage) {
       $scope.$parent.$watch($parse($attrs.itemsPerPage), function(value) {
         self.itemsPerPage = parseInt(value, 10);
@@ -1776,7 +1783,7 @@ angular.module('ui.bootstrap.pagination', [])
   };
 
   this.render = function() {
-    this.page = parseInt($scope.page, 10) || 1;
+    this.page = parseInt(ngModelCtrl.$viewValue, 10) || 1;
     if (this.page > 0 && this.page <= $scope.totalPages) {
       $scope.pages = this.getPages(this.page, $scope.totalPages);
     }
@@ -1784,8 +1791,8 @@ angular.module('ui.bootstrap.pagination', [])
 
   $scope.selectPage = function(page) {
     if ( ! self.isActive(page) && page > 0 && page <= $scope.totalPages) {
-      $scope.page = page;
-      $scope.onSelectPage({ page: page });
+      ngModelCtrl.$setViewValue(page);
+      ngModelCtrl.$render();
     }
   };
 
@@ -1803,7 +1810,7 @@ angular.module('ui.bootstrap.pagination', [])
     if ( self.page > value ) {
       $scope.selectPage(value);
     } else {
-      self.render();
+      ngModelCtrl.$render();
     }
   });
 }])
@@ -1823,14 +1830,18 @@ angular.module('ui.bootstrap.pagination', [])
   return {
     restrict: 'EA',
     scope: {
-      page: '=',
-      totalItems: '=',
-      onSelectPage:' &'
+      totalItems: '='
     },
+    require: ['pagination', '?ngModel'],
     controller: 'PaginationController',
     templateUrl: 'template/pagination/pagination.html',
     replace: true,
-    link: function(scope, element, attrs, paginationCtrl) {
+    link: function(scope, element, attrs, ctrls) {
+      var paginationCtrl = ctrls[0], ngModel = ctrls[1];
+
+      if (!ngModel) {
+         return; // do nothing if no ng-model
+      }
 
       // Setup configuration parameters
       var maxSize,
@@ -1842,7 +1853,7 @@ angular.module('ui.bootstrap.pagination', [])
       lastText       = paginationCtrl.getAttributeValue(attrs.lastText,       config.lastText,      true),
       rotate         = paginationCtrl.getAttributeValue(attrs.rotate,         config.rotate);
 
-      paginationCtrl.init(config.itemsPerPage);
+      paginationCtrl.init(ngModel, config.itemsPerPage);
 
       if (attrs.maxSize) {
         scope.$parent.$watch($parse(attrs.maxSize), function(value) {
@@ -1943,21 +1954,25 @@ angular.module('ui.bootstrap.pagination', [])
   return {
     restrict: 'EA',
     scope: {
-      page: '=',
-      totalItems: '=',
-      onSelectPage:' &'
+      totalItems: '='
     },
+    require: ['pager', '?ngModel'],
     controller: 'PaginationController',
     templateUrl: 'template/pagination/pager.html',
     replace: true,
-    link: function(scope, element, attrs, paginationCtrl) {
+    link: function(scope, element, attrs, ctrls) {
+      var paginationCtrl = ctrls[0], ngModel = ctrls[1];
+
+      if (!ngModel) {
+         return; // do nothing if no ng-model
+      }
 
       // Setup configuration parameters
       var previousText = paginationCtrl.getAttributeValue(attrs.previousText, config.previousText, true),
       nextText         = paginationCtrl.getAttributeValue(attrs.nextText,     config.nextText,     true),
       align            = paginationCtrl.getAttributeValue(attrs.align,        config.align);
 
-      paginationCtrl.init(config.itemsPerPage);
+      paginationCtrl.init(ngModel, config.itemsPerPage);
 
       // Create page object used in template
       function makePage(number, text, isDisabled, isPrevious, isNext) {
@@ -2490,12 +2505,22 @@ angular.module('ui.bootstrap.rating', [])
 })
 
 .controller('RatingController', ['$scope', '$attrs', '$parse', 'ratingConfig', function($scope, $attrs, $parse, ratingConfig) {
+  var ngModelCtrl  = {$setViewValue: angular.noop};
 
   this.maxRange = angular.isDefined($attrs.max) ? $scope.$parent.$eval($attrs.max) : ratingConfig.max;
   this.stateOn = angular.isDefined($attrs.stateOn) ? $scope.$parent.$eval($attrs.stateOn) : ratingConfig.stateOn;
   this.stateOff = angular.isDefined($attrs.stateOff) ? $scope.$parent.$eval($attrs.stateOff) : ratingConfig.stateOff;
+  
+  this.init = function(ngModelCtrl_) {
+    ngModelCtrl = ngModelCtrl_;
+    ngModelCtrl.$render = this.render;
+    
+     $scope.range = this.buildTemplateObjects(
+      angular.isDefined($attrs.ratingStates) ? $scope.$parent.$eval($attrs.ratingStates) : new Array(this.maxRange)
+    );
+  };
 
-  this.createRateObjects = function(states) {
+  this.buildTemplateObjects = function(states) {
     var defaultOptions = {
       stateOn: this.stateOn,
       stateOff: this.stateOff
@@ -2507,12 +2532,10 @@ angular.module('ui.bootstrap.rating', [])
     return states;
   };
 
-  // Get objects used in template
-  $scope.range = angular.isDefined($attrs.ratingStates) ?  this.createRateObjects(angular.copy($scope.$parent.$eval($attrs.ratingStates))): this.createRateObjects(new Array(this.maxRange));
-
   $scope.rate = function(value) {
-    if ( $scope.value !== value && !$scope.readonly ) {
-      $scope.value = value;
+    if ( !$scope.readonly ) {
+      ngModelCtrl.$setViewValue(value);
+      ngModelCtrl.$render();
     }
   };
 
@@ -2524,13 +2547,13 @@ angular.module('ui.bootstrap.rating', [])
   };
 
   $scope.reset = function() {
-    $scope.val = angular.copy($scope.value);
+    $scope.val = ngModelCtrl.$viewValue;
     $scope.onLeave();
   };
-
-  $scope.$watch('value', function(value) {
-    $scope.val = value;
-  });
+  
+  this.render = function() {
+    $scope.val = ngModelCtrl.$viewValue;
+  };
 
   $scope.readonly = false;
   if ($attrs.readonly) {
@@ -2543,14 +2566,21 @@ angular.module('ui.bootstrap.rating', [])
 .directive('rating', function() {
   return {
     restrict: 'EA',
+    require: ['rating', 'ngModel'],
     scope: {
-      value: '=',
       onHover: '&',
       onLeave: '&'
     },
     controller: 'RatingController',
     templateUrl: 'template/rating/rating.html',
-    replace: true
+    replace: true,
+    link: function(scope, element, attrs, ctrls) {
+      var ratingCtrl = ctrls[0], ngModelCtrl = ctrls[1];
+
+      if ( ngModelCtrl ) {
+        ratingCtrl.init( ngModelCtrl );
+      }
+    }
   };
 });
 
